@@ -19,6 +19,40 @@ const contentTypeMultipartRelated = "multipart/related"
 const contentTypeTextHtml = "text/html"
 const contentTypeTextPlain = "text/plain"
 
+// ParseParseMessage
+func ParseMessage(msg *mail.Message) (email Email, err error) {
+
+	email, err = createEmailFromHeader(msg.Header)
+	if err != nil {
+		return
+	}
+
+	email.ContentType = msg.Header.Get("Content-Type")
+	contentType, params, err := parseContentType(email.ContentType)
+	if err != nil {
+		return
+	}
+
+	switch contentType {
+	case contentTypeMultipartMixed:
+		email.TextBody, email.HTMLBody, email.Attachments, email.EmbeddedFiles, err = parseMultipartMixed(msg.Body, params["boundary"])
+	case contentTypeMultipartAlternative:
+		email.TextBody, email.HTMLBody, email.EmbeddedFiles, err = parseMultipartAlternative(msg.Body, params["boundary"])
+	case contentTypeMultipartRelated:
+		email.TextBody, email.HTMLBody, email.EmbeddedFiles, err = parseMultipartRelated(msg.Body, params["boundary"])
+	case contentTypeTextPlain:
+		message, _ := ioutil.ReadAll(msg.Body)
+		email.TextBody = strings.TrimSuffix(string(message[:]), "\n")
+	case contentTypeTextHtml:
+		message, _ := ioutil.ReadAll(msg.Body)
+		email.HTMLBody = strings.TrimSuffix(string(message[:]), "\n")
+	default:
+		email.Content, err = decodeContent(msg.Body, msg.Header.Get("Content-Transfer-Encoding"))
+	}
+
+	return
+}
+
 // Parse an email message read from io.Reader into parsemail.Email struct
 func Parse(r io.Reader) (email Email, err error) {
 	msg, err := mail.ReadMessage(r)
